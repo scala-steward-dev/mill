@@ -4,7 +4,7 @@ package scalalib
 import scala.annotation.nowarn
 import mill.api.{DummyInputStream, JarManifest, PathRef, Result, SystemStreams, internal}
 import mill.main.BuildInfo
-import mill.util.Jvm
+import mill.util.{Jvm, Util}
 import mill.util.Jvm.createJar
 import mill.api.Loose.Agg
 import mill.scalalib.api.{CompilationResult, Versions, ZincWorkerUtil}
@@ -367,7 +367,7 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase { outer =>
    * for you to test and operate your code interactively.
    */
   def console(): Command[Unit] = T.command {
-    if (T.log.inStream == DummyInputStream) {
+    if (!Util.isInteractive()) {
       Result.Failure("console needs to be run with the -i/--interactive flag")
     } else {
       SystemStreams.withStreams(SystemStreams.original) {
@@ -481,21 +481,14 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase { outer =>
    */
   @nowarn("msg=pure expression does nothing")
   override def prepareOffline(all: Flag): Command[Unit] = {
+    val ammonite = resolvedAmmoniteReplIvyDeps
     val tasks =
-      if (all.value) Seq(
-        resolvedAmmoniteReplIvyDeps,
-        T.task {
-          zincWorker().scalaCompilerBridgeJar(
-            scalaVersion(),
-            scalaOrganization(),
-            repositoriesTask()
-          )
-        }
-      )
+      if (all.value) Seq(ammonite)
       else Seq()
 
     T.command {
       super.prepareOffline(all)()
+      // resolve the compile bridge jar
       resolveDeps(T.task {
         val bind = bindDependency()
         scalacPluginIvyDeps().map(bind)
@@ -504,6 +497,11 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase { outer =>
         val bind = bindDependency()
         scalaDocPluginIvyDeps().map(bind)
       })()
+      zincWorker().scalaCompilerBridgeJar(
+        scalaVersion(),
+        scalaOrganization(),
+        repositoriesTask()
+      )
       T.sequence(tasks)()
       ()
     }
@@ -580,7 +578,7 @@ trait ScalaModule extends JavaModule with TestModule.ScalaModuleBase { outer =>
         scalacOptions = scalacOptions,
         compilerClasspath = scalaCompilerClasspath(),
         scalacPluginClasspath = semanticDbPluginClasspath(),
-        reporter = T.reporter.apply(hashCode),
+        reporter = None,
         reportCachedProblems = zincReportCachedProblems()
       )
       .map(r =>
