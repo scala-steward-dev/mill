@@ -222,17 +222,19 @@ val bridgeScalaVersions = Seq(
 // of them. Compiler bridges not in this set will get downloaded and compiled
 // on the fly anyway. For publishing, we publish everything or a specific version
 // if given.
-val compilerBridgeScalaVersions = interp.watchValue(sys.env.get("MILL_COMPILER_BRIDGE_VERSIONS")) match {
-  case None => Seq.empty[String]
-  case Some("all") => bridgeScalaVersions
-  case Some(versions) => versions.split(',').map(_.trim).toSeq
-}
+val compilerBridgeScalaVersions =
+  interp.watchValue(sys.env.get("MILL_COMPILER_BRIDGE_VERSIONS")) match {
+    case None => Seq.empty[String]
+    case Some("all") => bridgeScalaVersions
+    case Some(versions) => versions.split(',').map(_.trim).toSeq
+  }
 val bridgeVersion = "0.0.1"
 
 trait MillJavaModule extends JavaModule {
 
   // Test setup
-  def testDep = T { (s"com.lihaoyi-${artifactId()}", testDepPaths().map(_.path).mkString("\n")) }
+  def testDep: T[(String, String)] =
+    T { (s"com.lihaoyi-${artifactId()}", testDepPaths().map(_.path).mkString("\n")) }
 
   // Workaround for Zinc/JNA bug
   // https://github.com/sbt/sbt/blame/6718803ee6023ab041b045a6988fafcfae9d15b5/main/src/main/scala/sbt/Main.scala#L130
@@ -777,8 +779,11 @@ object contrib extends Module {
     def moduleDeps = Seq(scoverage.api)
     def compileModuleDeps = Seq(scalalib)
 
-    def testTransitiveDeps =
-      super.testTransitiveDeps() ++ Seq(worker.testDep(), worker2.testDep())
+    def testTransitiveDeps = T.input {
+      super.testTransitiveDeps() ++
+        (if (scoverage.enableScoverage1) Seq(worker("1").testDep()) else Seq()) ++
+        Seq(worker("2").testDep())
+    }
 
     def testArgs = T {
       super.testArgs() ++
@@ -794,30 +799,32 @@ object contrib extends Module {
       super.testModuleDeps ++
         Seq(scalalib, scalajslib, scalanativelib, contrib.buildinfo)
 
-    // Worker for Scoverage 1.x
-    object worker extends MillPublishScalaModule {
+    val enableScoverage1 = !scala.util.Properties.isJavaAtLeast(21)
+    val workerVersions = Seq("1").filter(_ => enableScoverage1) ++ Seq("2")
+    object worker extends Cross[Worker](workerVersions)
+    trait Worker extends MillPublishScalaModule with Cross.Module[String] {
+      def millSourcePath = crossValue match {
+        case "1" => super.millSourcePath
+        case "2" => super.millSourcePath / os.up / "worker2"
+      }
       def compileModuleDeps = Seq(main.api)
       def moduleDeps = Seq(scoverage.api)
       def testDepPaths = T { Seq(compile().classes) }
 
+      def scalaVersion = crossValue match {
+        case "1" => Deps.scalaVersionForScoverageWorker1
+        case "2" => super.scalaVersion
+      }
       // compile-time only, need to provide the correct scoverage version at runtime
-      def compileIvyDeps = Agg(Deps.scalacScoveragePlugin)
-      def scalaVersion = Deps.scalaVersionForScoverageWorker1
-    }
-
-    // Worker for Scoverage 2.0
-    object worker2 extends MillPublishScalaModule {
-      def compileModuleDeps = Seq(main.api)
-      def moduleDeps = Seq(scoverage.api)
-      def testDepPaths = T { Seq(compile().classes) }
-      def compileIvyDeps = T {
-        Agg(
-          // compile-time only, need to provide the correct scoverage version at runtime
-          Deps.scalacScoverage2Plugin,
-          Deps.scalacScoverage2Reporter,
-          Deps.scalacScoverage2Domain,
-          Deps.scalacScoverage2Serializer
-        )
+      def compileIvyDeps = crossValue match {
+        case "1" => Agg(Deps.scalacScoveragePlugin)
+        case "2" => Agg(
+            // compile-time only, need to provide the correct scoverage version at runtime
+            Deps.scalacScoverage2Plugin,
+            Deps.scalacScoverage2Reporter,
+            Deps.scalacScoverage2Domain,
+            Deps.scalacScoverage2Serializer
+          )
       }
     }
   }
@@ -1281,7 +1288,7 @@ object dev extends MillPublishScalaModule {
     scalalib.backgroundwrapper.testDep(),
     contrib.buildinfo.testDep(),
     contrib.scoverage.testDep(),
-    contrib.scoverage.worker2.testDep(),
+    contrib.scoverage.worker("2").testDep(),
     contrib.playlib.testDep(),
     contrib.playlib.worker("2.8").testDep(),
     bsp.worker.testDep()
