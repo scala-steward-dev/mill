@@ -1,5 +1,4 @@
 // plugins and dependencies
-
 import $file.ci.shared
 import $file.ci.upload
 import $ivy.`org.scalaj::scalaj-http:2.4.2`
@@ -7,7 +6,8 @@ import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version::0.4.0`
 import $ivy.`com.github.lolgab::mill-mima::0.1.0`
 import $ivy.`net.sourceforge.htmlcleaner:htmlcleaner:2.29`
 import $ivy.`com.lihaoyi::mill-contrib-buildinfo:`
-import $ivy.`com.goyeau::mill-scalafix::0.3.1`
+import $ivy.`com.goyeau::mill-scalafix::0.3.2`
+
 
 // imports
 import com.github.lolgab.mill.mima.{CheckDirection, ProblemFilter, Mima}
@@ -19,6 +19,7 @@ import mill.api.JarManifest
 import mill.define.NamedTask
 import mill.main.Tasks
 import mill.scalalib._
+import mill.scalalib.api.ZincWorkerUtil
 import mill.scalalib.publish._
 import mill.util.Jvm
 import mill.resolve.SelectMode
@@ -170,7 +171,7 @@ object Deps {
   val semanticDBscala = ivy"org.scalameta:::semanticdb-scalac:4.8.15"
   val semanticDbJava = ivy"com.sourcegraph:semanticdb-java:0.9.8"
   val sourcecode = ivy"com.lihaoyi::sourcecode:0.3.1"
-  val upickle = ivy"com.lihaoyi::upickle:3.1.3"
+  val upickle = ivy"com.lihaoyi::upickle:3.1.4"
   val utest = ivy"com.lihaoyi::utest:0.8.2"
   val windowsAnsi = ivy"io.github.alexarchambault.windows-ansi:windows-ansi:0.0.5"
   val zinc = ivy"org.scala-sbt::zinc:1.9.6"
@@ -322,6 +323,7 @@ trait MillPublishJavaModule extends MillJavaModule with PublishModule {
  */
 trait MillScalaModule extends ScalaModule with MillJavaModule with ScalafixModule { outer =>
   def scalaVersion = Deps.scalaVersion
+  def scalafixScalaBinaryVersion = ZincWorkerUtil.scalaBinaryVersion(scalaVersion())
   def scalacOptions =
     super.scalacOptions() ++ Seq(
       "-deprecation",
