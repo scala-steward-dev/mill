@@ -320,10 +320,16 @@ trait MillPublishJavaModule extends MillJavaModule with PublishModule {
 /**
  * Some custom scala settings and test convenience
  */
-trait MillScalaModule extends ScalaModule with MillJavaModule with ScalafixModule{ outer =>
+trait MillScalaModule extends ScalaModule with MillJavaModule with ScalafixModule { outer =>
   def scalaVersion = Deps.scalaVersion
   def scalacOptions =
-    super.scalacOptions() ++ Seq("-deprecation", "-P:acyclic:force", "-feature", "-Xlint:unused", "-Xlint:adapted-args")
+    super.scalacOptions() ++ Seq(
+      "-deprecation",
+      "-P:acyclic:force",
+      "-feature",
+      "-Xlint:unused",
+      "-Xlint:adapted-args"
+    )
 
   def testIvyDeps: T[Agg[Dep]] = Agg(Deps.utest)
   def testModuleDeps: Seq[JavaModule] =
@@ -824,7 +830,7 @@ object contrib extends Module {
     // Worker for Scoverage 1.x
     object worker extends MillPublishScalaModule {
       // scoverage is on an old Scala version which doesnt support scalafix
-      def fix(args: String*): Command[Unit] = T.command{}
+      def fix(args: String*): Command[Unit] = T.command {}
       def compileModuleDeps = Seq(main.api)
       def moduleDeps = Seq(scoverage.api)
       def testDepPaths = T { Seq(compile().classes) }
@@ -1050,7 +1056,7 @@ object example extends MillScalaModule {
 
   trait ExampleCrossModule extends IntegrationTestCrossModule {
     // disable scalafix because these example modules don't have sources causing it to misbehave
-    def fix(args: String*): Command[Unit] = T.command{}
+    def fix(args: String*): Command[Unit] = T.command {}
     def testRepoRoot: T[PathRef] = T.source(millSourcePath)
     def compile = example.compile()
     def forkEnv = super.forkEnv() ++ Map("MILL_EXAMPLE_PARSED" -> upickle.default.write(parsed()))
@@ -1309,7 +1315,7 @@ object dist extends MillPublishJavaModule {
 
 object dev extends MillPublishScalaModule {
   // disable scalafix here because it crashes when a module has no sources
-  def fix(args: String*): Command[Unit] = T.command{}
+  def fix(args: String*): Command[Unit] = T.command {}
   def moduleDeps = Seq(runner, idea)
 
   def testTransitiveDeps = super.testTransitiveDeps() ++ Seq(
